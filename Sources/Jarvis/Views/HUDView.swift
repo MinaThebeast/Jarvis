@@ -4,6 +4,9 @@ import SwiftUI
 
 struct HUDView: View {
     @EnvironmentObject var vm: JarvisViewModel
+    @ObservedObject var activityCenter: ActivityCenter
+    @ObservedObject var approvalService: ApprovalService
+    @ObservedObject var perceptionService: PerceptionService
 
     @State private var statusBlink = true
     @State private var elapsedTime: Date = Date()
@@ -133,6 +136,27 @@ struct HUDView: View {
 
             // Arc reactor
             ArcReactorView(phase: phase, audioLevel: vm.audioLevel)
+
+            if let toast = activityCenter.toastEvent {
+                VStack {
+                    Spacer()
+                    ActivityToastView(event: toast, accent: accent)
+                        .padding(.bottom, 100)
+                        .transition(.opacity.combined(with: .move(edge: .bottom)))
+                }
+                .animation(.easeInOut(duration: 0.35), value: toast.id)
+            }
+
+            if let pending = approvalService.pending {
+                ApprovalCardView(
+                    pending: pending,
+                    accent: accent,
+                    onApprove: { approvalService.approve() },
+                    onDeny: { approvalService.deny() }
+                )
+                .transition(.opacity.combined(with: .scale(scale: 0.96)))
+                .zIndex(2)
+            }
         }
     }
 
@@ -195,14 +219,39 @@ struct HUDView: View {
             statusRow("NEURAL CORE",    value: "ONLINE",  ok: true)
             statusRow("API LINK",       value: "SECURE",  ok: vm.isConfigured)
             statusRow("VOICE ENGINE",   value: vm.isMicListening ? "ACTIVE" : "STANDBY", ok: vm.isMicListening)
+            statusRow(
+                "PERCEPTION",
+                value: perceptionService.enabled ? "ON" : "OFF",
+                ok: perceptionService.enabled
+            )
+            statusRow(
+                "AUTONOMY",
+                value: vm.fleetAutonomyEnabled ? "ON" : "OFF",
+                ok: vm.fleetAutonomyEnabled
+            )
             statusRow("MEMORY",         value: "\(vm.messages.count * 2) KB", ok: true)
             statusRow("ENCRYPTION",     value: "AES-256", ok: true)
 
             Spacer()
+
+            panelHeader("ACTIVITY")
+            ActivityFeedView(events: activityCenter.events, accent: accent)
+
+            panelHeader("GOALS")
+            GoalsListView(goals: vm.fleetGoals, accent: accent)
+
             panelHeader("CONTEXT")
             Text("\(vm.messages.count) exchanges logged")
                 .font(.system(size: 10, design: .monospaced))
                 .foregroundColor(accent.opacity(0.5))
+
+            if perceptionService.enabled, let summary = perceptionService.latestSummary {
+                Text(summary)
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundColor(accent.opacity(0.45))
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 
@@ -218,9 +267,14 @@ struct HUDView: View {
             )
             metricRow("LATENCY",  value: "—")
             metricRow("MODEL",    value: "GPT-4o")
+            metricRow("SPEND",    value: vm.spendSummary?.hudLabel ?? "—")
             metricRow("TTS",      value: vm.voiceStore.openAIVoiceName)
             metricRow("LANG",     value: "EN-US")
             metricRow("TEMP",     value: "0.7")
+
+            perceptionToggle
+
+            autonomyToggle
 
             voiceToggle
 
@@ -271,6 +325,47 @@ struct HUDView: View {
             Text(value)
                 .font(.system(size: 9, weight: .bold, design: .monospaced))
                 .foregroundColor(accent.opacity(0.8))
+        }
+    }
+
+    private var perceptionToggle: some View {
+        VStack(alignment: .trailing, spacing: 6) {
+            Text("PERCEPTION")
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundColor(accent.opacity(0.5))
+                .tracking(4)
+
+            Toggle(isOn: Binding(
+                get: { perceptionService.enabled },
+                set: { vm.setPerceptionEnabled($0) }
+            )) {
+                Text(perceptionService.enabled ? "Watching" : "Off")
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundColor(accent.opacity(0.7))
+            }
+            .toggleStyle(.switch)
+            .frame(width: 160)
+        }
+    }
+
+    private var autonomyToggle: some View {
+        VStack(alignment: .trailing, spacing: 6) {
+            Text("AUTONOMY")
+                .font(.system(size: 9, weight: .bold, design: .monospaced))
+                .foregroundColor(accent.opacity(0.5))
+                .tracking(4)
+
+            Toggle(isOn: Binding(
+                get: { vm.fleetAutonomyEnabled },
+                set: { vm.setFleetAutonomyEnabled($0) }
+            )) {
+                Text(vm.fleetAutonomyEnabled ? "Autonomous" : "Off")
+                    .font(.system(size: 9, design: .monospaced))
+                    .foregroundColor(accent.opacity(0.7))
+            }
+            .toggleStyle(.switch)
+            .frame(width: 160)
+            .disabled(!vm.orchestratorOnline)
         }
     }
 

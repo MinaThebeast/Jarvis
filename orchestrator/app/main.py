@@ -1,16 +1,22 @@
 from __future__ import annotations
 
+import asyncio
 import json
 from contextlib import asynccontextmanager
 from typing import Dict, List, Optional
 
 from fastapi import FastAPI, HTTPException
-from openai import OpenAI
 from pydantic import BaseModel, Field
 
-from app.config import DEFAULT_MODEL, OPENAI_API_KEY
-from app.db import init_db, log_audit_event
+from app.config import DEFAULT_MODEL
+from app.db import get_connection, init_db, log_audit_event
+from app.heartbeat import heartbeat_loop
+from app.openai_client import chat_completion, get_openai_client
+from app.routes_autonomy import router as autonomy_router
 from app.routes_fleet import router as fleet_router
+from app.routes_system import router as system_router
+from app.routes_workflow import router as workflow_router
+from app.system_store import require_not_halted
 
 
 class HistoryMessage(BaseModel):
@@ -32,20 +38,20 @@ class AgentRunResponse(BaseModel):
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
+    heartbeat_task = asyncio.create_task(heartbeat_loop())
     yield
+    heartbeat_task.cancel()
+    try:
+        await heartbeat_task
+    except asyncio.CancelledError:
+        pass
 
 
 app = FastAPI(title="JARVIS Orchestrator", lifespan=lifespan)
 app.include_router(fleet_router)
-
-
-def get_openai_client() -> OpenAI:
-    if not OPENAI_API_KEY:
-        raise HTTPException(
-            status_code=500,
-            detail="OPENAI_API_KEY is not configured. Set it in the environment or orchestrator/.env.",
-        )
-    return OpenAI(api_key=OPENAI_API_KEY)
+app.include_router(workflow_router)
+app.include_router(system_router)
+app.include_router(autonomy_router)
 
 
 @app.get("/health")
@@ -55,6 +61,9 @@ def health() -> Dict[str, str]:
 
 @app.post("/agent/run", response_model=AgentRunResponse)
 def agent_run(body: AgentRunRequest) -> AgentRunResponse:
+    with get_connection() as conn:
+        require_not_halted(conn)
+
     model = body.model or DEFAULT_MODEL
     messages: List[Dict[str, str]] = [{"role": "system", "content": body.system_prompt}]
 
@@ -66,10 +75,14 @@ def agent_run(body: AgentRunRequest) -> AgentRunResponse:
     client = get_openai_client()
 
     try:
-        completion = client.chat.completions.create(
+        completion = chat_completion(
+            client,
             model=model,
             messages=messages,
+            source="agent_run",
         )
+    except HTTPException:
+        raise
     except Exception as exc:
         log_audit_event(
             agent="orchestrator",

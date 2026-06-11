@@ -4,9 +4,8 @@ import json
 from typing import List
 
 from fastapi import APIRouter, HTTPException
-from openai import OpenAI
 
-from app.config import DEFAULT_MODEL, OPENAI_API_KEY
+from app.agent_runner import run_agent_turn
 from app.db import get_connection, log_audit_event
 from app.fleet_store import (
     create_role,
@@ -16,6 +15,8 @@ from app.fleet_store import (
     list_agents,
     list_roles,
 )
+from app.openai_client import get_openai_client
+from app.system_store import require_not_halted
 from app.schemas import (
     AgentHire,
     AgentOut,
@@ -26,15 +27,6 @@ from app.schemas import (
 )
 
 router = APIRouter()
-
-
-def _openai_client() -> OpenAI:
-    if not OPENAI_API_KEY:
-        raise HTTPException(
-            status_code=500,
-            detail="OPENAI_API_KEY is not configured. Set it in the environment or orchestrator/.env.",
-        )
-    return OpenAI(api_key=OPENAI_API_KEY)
 
 
 @router.post("/roles", response_model=RoleOut)
@@ -81,6 +73,7 @@ def post_agent(body: AgentHire) -> AgentOut:
                 custom_system_prompt=body.system_prompt,
                 model=body.model,
                 manager_id=body.manager_id,
+                granted_tools=body.granted_tools,
             )
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -123,20 +116,19 @@ def run_agent_task(agent_id: int, body: AgentTaskRun) -> AgentTaskResponse:
     if agent["status"] != "active":
         raise HTTPException(status_code=400, detail=f"Agent {agent_id} is not active.")
 
+    with get_connection() as conn:
+        require_not_halted(conn)
+
     user_content = task
     if body.context and body.context.strip():
         user_content = f"Context:\n{body.context.strip()}\n\nTask:\n{task}"
 
-    messages = [
-        {"role": "system", "content": agent["system_prompt"]},
-        {"role": "user", "content": user_content},
-    ]
-
-    client = _openai_client()
-    model = agent["model"] or DEFAULT_MODEL
+    client = get_openai_client()
 
     try:
-        completion = client.chat.completions.create(model=model, messages=messages)
+        output = run_agent_turn(client, agent, task=task, context=body.context)
+    except HTTPException:
+        raise
     except Exception as exc:
         log_audit_event(
             agent=str(agent_id),
@@ -145,7 +137,6 @@ def run_agent_task(agent_id: int, body: AgentTaskRun) -> AgentTaskResponse:
         )
         raise HTTPException(status_code=502, detail=f"OpenAI request failed: {exc}") from exc
 
-    output = completion.choices[0].message.content or ""
     log_audit_event(
         agent=str(agent_id),
         action="agent_task_run",

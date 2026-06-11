@@ -88,6 +88,7 @@ def hire_agent(
     custom_system_prompt: Optional[str] = None,
     model: Optional[str] = None,
     manager_id: Optional[int] = None,
+    granted_tools: Optional[List[str]] = None,
 ) -> dict:
     role = get_role(conn, role_id)
     if role is None:
@@ -95,6 +96,9 @@ def hire_agent(
 
     if manager_id is not None and get_agent(conn, manager_id) is None:
         raise ValueError(f"Manager agent {manager_id} not found.")
+
+    resolved_tools = granted_tools if granted_tools else role["default_tools"]
+    resolved_skills = role["default_skills"]
 
     system_prompt = compose_agent_system_prompt(
         agent_name=name,
@@ -115,8 +119,8 @@ def hire_agent(
             role_id,
             system_prompt,
             model or DEFAULT_MODEL,
-            dumps_json_list(role["default_tools"]),
-            dumps_json_list(role["default_skills"]),
+            dumps_json_list(resolved_tools),
+            dumps_json_list(resolved_skills),
             manager_id,
             "active",
             created_at,

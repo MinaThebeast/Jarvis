@@ -70,6 +70,79 @@ MIGRATIONS: List[Tuple[str, str]] = [
         WHERE NOT EXISTS (SELECT 1 FROM roles WHERE title = 'Analyst');
         """,
     ),
+    (
+        "004_workflow_tables",
+        """
+        CREATE TABLE IF NOT EXISTS goals (
+            id INTEGER PRIMARY KEY,
+            description TEXT NOT NULL,
+            success_criteria TEXT,
+            status VARCHAR(50) NOT NULL DEFAULT 'planned',
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS workflows (
+            id INTEGER PRIMARY KEY,
+            goal_id INTEGER NOT NULL,
+            status VARCHAR(50) NOT NULL DEFAULT 'pending',
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS tasks (
+            id INTEGER PRIMARY KEY,
+            workflow_id INTEGER NOT NULL,
+            title VARCHAR(255) NOT NULL,
+            assignee_role VARCHAR(255) NOT NULL,
+            assignee_agent_id INTEGER,
+            input TEXT NOT NULL,
+            output TEXT,
+            status VARCHAR(50) NOT NULL DEFAULT 'pending',
+            depends_on TEXT NOT NULL DEFAULT '[]',
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        """,
+    ),
+    (
+        "005_governance",
+        """
+        CREATE TABLE IF NOT EXISTS spend_events (
+            id INTEGER PRIMARY KEY,
+            tokens INTEGER NOT NULL,
+            source VARCHAR(255) NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
+        CREATE TABLE IF NOT EXISTS system_state (
+            key VARCHAR(255) PRIMARY KEY,
+            value TEXT NOT NULL,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        """,
+    ),
+    (
+        "006_seed_operator_role",
+        """
+        INSERT INTO roles (title, responsibilities, default_tools, default_skills)
+        SELECT
+            'Operator',
+            'Executes tasks on the machine — running commands, controlling apps, and producing files — under approval governance.',
+            '["run_shell","run_applescript","control_app","see_screen","see_active_window","type_text","press_keys","mouse_click","save_deliverable"]',
+            '[]'
+        WHERE NOT EXISTS (SELECT 1 FROM roles WHERE title = 'Operator');
+        """,
+    ),
+    (
+        "007_autonomy",
+        """
+        CREATE TABLE IF NOT EXISTS autonomy_events (
+            id INTEGER PRIMARY KEY,
+            type VARCHAR(255) NOT NULL,
+            goal_id INTEGER,
+            message TEXT NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        """,
+    ),
 ]
 
 

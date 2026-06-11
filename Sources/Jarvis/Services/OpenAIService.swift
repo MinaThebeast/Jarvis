@@ -150,6 +150,51 @@ final class OpenAIService {
         return text
     }
 
+    /// Low-cost ambient screen summary for background perception.
+    func ambientScreenSummary(jpegBase64: String) async throws -> String {
+        guard hasKey else { throw OpenAIError.noAPIKey }
+
+        let url = URL(string: "https://api.openai.com/v1/chat/completions")!
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.timeoutInterval = 45
+
+        let prompt = """
+        Briefly summarize what is on screen in 1-2 sentences. \
+        Focus on the active application and visible content. Be factual and concise.
+        """
+
+        let content: [[String: Any]] = [
+            ["type": "text", "text": prompt],
+            [
+                "type": "image_url",
+                "image_url": [
+                    "url": "data:image/jpeg;base64,\(jpegBase64)",
+                    "detail": "low"
+                ] as [String: Any]
+            ]
+        ]
+
+        let body: [String: Any] = [
+            "model":      JarvisConfig.chatModel,
+            "messages":   [["role": "user", "content": content]],
+            "max_tokens": 120
+        ]
+        req.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+        let (data, response) = try await URLSession.shared.data(for: req)
+        try validateHTTP(response: response, data: data)
+
+        let decoded = try JSONDecoder().decode(VisionCompletionResponse.self, from: data)
+        guard let text = decoded.choices.first?.message.content,
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw OpenAIError.emptyResponse
+        }
+        return text.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     // MARK: Text-to-Speech
 
     func textToSpeech(_ text: String) async throws -> Data {

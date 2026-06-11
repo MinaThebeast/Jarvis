@@ -9,6 +9,10 @@ enum SpeechEvent {
     case commandCaptureStarted
     case commandCaptureCancelled
     case abortRequested
+    case fleetHaltRequested
+    case approvalVoiceCommand(approved: Bool)
+    case perceptionVoiceCommand(enabled: Bool)
+    case autonomyVoiceCommand(enabled: Bool)
     case audioLevel(Float)
     case permissionDenied(String)
     case recognitionError(Error)
@@ -24,6 +28,7 @@ final class SpeechRecognitionService: NSObject, ObservableObject {
     @Published var liveTranscript = ""
 
     var onEvent: ((SpeechEvent) -> Void)?
+    var listensForApproval = false
 
     // MARK: Private
     private let audioEngine    = AVAudioEngine()
@@ -207,12 +212,38 @@ final class SpeechRecognitionService: NSObject, ObservableObject {
 
         liveTranscript = rawText
 
+        for phrase in JarvisConfig.fleetHaltPhrases {
+            if text.contains(phrase) {
+                resetCapture()
+                onEvent?(.fleetHaltRequested)
+                return
+            }
+        }
+
         for phrase in JarvisConfig.abortPhrases {
             if text.contains(phrase) {
                 resetCapture()
                 onEvent?(.abortRequested)
                 return
             }
+        }
+
+        if listensForApproval, let approved = matchApprovalCommand(in: text) {
+            resetCapture()
+            onEvent?(.approvalVoiceCommand(approved: approved))
+            return
+        }
+
+        if let perceptionEnabled = matchPerceptionCommand(in: text) {
+            resetCapture()
+            onEvent?(.perceptionVoiceCommand(enabled: perceptionEnabled))
+            return
+        }
+
+        if let autonomyEnabled = matchAutonomyCommand(in: text) {
+            resetCapture()
+            onEvent?(.autonomyVoiceCommand(enabled: autonomyEnabled))
+            return
         }
 
         switch listeningState {
@@ -254,6 +285,41 @@ final class SpeechRecognitionService: NSObject, ObservableObject {
                     .trimmingCharacters(in: .whitespacesAndNewlines)
                 return (wakeWord, afterWake)
             }
+        }
+        return nil
+    }
+
+    private func matchApprovalCommand(in text: String) -> Bool? {
+        let normalized = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if JarvisConfig.approvePhrases.contains(where: { phrase in
+            normalized == phrase || normalized.hasSuffix(phrase)
+        }) {
+            return true
+        }
+        if JarvisConfig.denyPhrases.contains(where: { phrase in
+            normalized == phrase || normalized.hasSuffix(phrase)
+        }) {
+            return false
+        }
+        return nil
+    }
+
+    private func matchPerceptionCommand(in text: String) -> Bool? {
+        if JarvisConfig.perceptionEnablePhrases.contains(where: { text.contains($0) }) {
+            return true
+        }
+        if JarvisConfig.perceptionDisablePhrases.contains(where: { text.contains($0) }) {
+            return false
+        }
+        return nil
+    }
+
+    private func matchAutonomyCommand(in text: String) -> Bool? {
+        if JarvisConfig.autonomyEnablePhrases.contains(where: { text.contains($0) }) {
+            return true
+        }
+        if JarvisConfig.autonomyDisablePhrases.contains(where: { text.contains($0) }) {
+            return false
         }
         return nil
     }

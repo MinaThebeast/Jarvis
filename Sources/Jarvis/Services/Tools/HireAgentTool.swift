@@ -2,6 +2,12 @@ import Foundation
 
 struct HireAgentTool: JarvisTool {
     let orchestrator: OrchestratorClient
+    let activityCenter: ActivityCenter
+
+    init(orchestrator: OrchestratorClient, activityCenter: ActivityCenter) {
+        self.orchestrator = orchestrator
+        self.activityCenter = activityCenter
+    }
 
     let name = "hire_agent"
     let description = "Hires a specialist agent from the orchestrator fleet for a given role title."
@@ -48,6 +54,7 @@ struct HireAgentTool: JarvisTool {
             }
 
             let agent = try await orchestrator.hireAgent(name: trimmedName, roleId: role.id)
+            await activityCenter.post(.fleet, "Hired \(agent.name) (\(role.title))")
             return "Hired agent \(agent.name) (id \(agent.id)) for role \(role.title)."
         } catch {
             return "Error hiring agent: \(error.localizedDescription)"

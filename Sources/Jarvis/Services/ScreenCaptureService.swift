@@ -30,6 +30,22 @@ final class ScreenCaptureService {
         return try encodeJPEG(from: image)
     }
 
+    /// Small thumbnail for cheap change detection (no API call).
+    func capturePerceptionFingerprint() throws -> CGImage {
+        guard let image = CGDisplayCreateImage(CGMainDisplayID()) else {
+            throw ScreenCaptureError.captureFailed
+        }
+        return downscale(image, maxSide: JarvisConfig.perceptionFingerprintSide)
+    }
+
+    /// Downscaled JPEG for low-detail ambient vision when the screen changed.
+    func capturePerceptionVisionFrame() throws -> Data {
+        guard let image = CGDisplayCreateImage(CGMainDisplayID()) else {
+            throw ScreenCaptureError.captureFailed
+        }
+        return try encodeJPEG(from: downscale(image, maxSide: JarvisConfig.perceptionVisionMaxSide))
+    }
+
     func captureActiveWindow() throws -> Data {
         if let windowImage = try captureFrontmostWindow() {
             return windowImage
@@ -92,12 +108,16 @@ final class ScreenCaptureService {
     }
 
     private func downscaleIfNeeded(_ image: CGImage) -> CGImage {
+        downscale(image, maxSide: maxLongestSide)
+    }
+
+    private func downscale(_ image: CGImage, maxSide: CGFloat) -> CGImage {
         let width = image.width
         let height = image.height
         let longest = max(width, height)
-        guard longest > Int(maxLongestSide) else { return image }
+        guard longest > Int(maxSide) else { return image }
 
-        let scale = maxLongestSide / CGFloat(longest)
+        let scale = maxSide / CGFloat(longest)
         let newWidth = Int(CGFloat(width) * scale)
         let newHeight = Int(CGFloat(height) * scale)
 
@@ -114,7 +134,7 @@ final class ScreenCaptureService {
             return image
         }
 
-        context.interpolationQuality = .high
+        context.interpolationQuality = .medium
         context.draw(image, in: CGRect(x: 0, y: 0, width: newWidth, height: newHeight))
         return context.makeImage() ?? image
     }

@@ -20,23 +20,9 @@ struct ShellTool: JarvisTool {
 
     private static let outputLimit = 4000
 
-    private static let destructivePatterns = [
-        "rm -rf /",
-        "rm -rf ~",
-        "rm -rf *",
-        "mkfs",
-        "dd if=",
-        "dd of=",
-        "diskutil erase",
-        "> /dev/",
-        "shutdown",
-        "reboot",
-        "halt",
-        ":(){",
-        "killall",
-        "sudo rm",
-        "chmod -r 000"
-    ]
+    private static var destructivePatterns: [String] {
+        JarvisConfig.shellDestructivePatterns
+    }
 
     func execute(arguments: [String: Any]) async throws -> String {
         guard let command = arguments["command"] as? String else {

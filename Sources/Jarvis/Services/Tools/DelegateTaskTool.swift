@@ -2,6 +2,18 @@ import Foundation
 
 struct DelegateTaskTool: JarvisTool {
     let orchestrator: OrchestratorClient
+    let activityCenter: ActivityCenter
+    let localAgentRunner: LocalAgentRunner
+
+    init(
+        orchestrator: OrchestratorClient,
+        activityCenter: ActivityCenter,
+        localAgentRunner: LocalAgentRunner
+    ) {
+        self.orchestrator = orchestrator
+        self.activityCenter = activityCenter
+        self.localAgentRunner = localAgentRunner
+    }
 
     let name = "delegate_task"
     let description = "Delegates a task to a hired fleet agent and returns the agent's output."
@@ -46,7 +58,7 @@ struct DelegateTaskTool: JarvisTool {
 
         do {
             let agents = try await orchestrator.listAgents()
-            guard let agent = resolveAgent(ref: trimmedRef, from: agents) else {
+            guard let summary = resolveAgent(ref: trimmedRef, from: agents) else {
                 let roster = agents.map { "\($0.name) (id \($0.id))" }.joined(separator: ", ")
                 if roster.isEmpty {
                     return "Error: agent '\(trimmedRef)' not found. No agents are hired yet."
@@ -54,11 +66,29 @@ struct DelegateTaskTool: JarvisTool {
                 return "Error: agent '\(trimmedRef)' not found. Current roster: \(roster)."
             }
 
-            let output = try await orchestrator.runAgent(
-                agentId: agent.id,
-                task: trimmedTask,
-                context: context
-            )
+            let agent = try await orchestrator.getAgent(id: summary.id)
+            let output: String
+
+            if agent.hasOSTools {
+                output = try await localAgentRunner.run(
+                    agent: agent,
+                    task: trimmedTask,
+                    context: context
+                )
+                await MainActor.run {
+                    activityCenter.post(.fleet, "Delegated locally to \(agent.name)")
+                }
+            } else {
+                output = try await orchestrator.runAgent(
+                    agentId: agent.id,
+                    task: trimmedTask,
+                    context: context
+                )
+                await MainActor.run {
+                    activityCenter.post(.fleet, "Delegated to \(agent.name)")
+                }
+            }
+
             return "Output from \(agent.name) (id \(agent.id)):\n\(output)"
         } catch {
             return "Error delegating task: \(error.localizedDescription)"

@@ -33,12 +33,173 @@ struct OrchestratorAgent: Decodable {
     let id: Int
     let name: String
     let roleId: Int
+    let systemPrompt: String
     let model: String
+    let grantedTools: [String]
     let status: String
 
     enum CodingKeys: String, CodingKey {
         case id, name, model, status
         case roleId = "role_id"
+        case systemPrompt = "system_prompt"
+        case grantedTools = "granted_tools"
+    }
+
+    var hasOSTools: Bool {
+        !Set(grantedTools).isDisjoint(with: JarvisConfig.osToolNames)
+    }
+}
+
+struct PlannedTask: Decodable {
+    let id: Int
+    let title: String
+    let assigneeRole: String
+    let status: String
+    let dependsOn: [Int]
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, status
+        case assigneeRole = "assignee_role"
+        case dependsOn = "depends_on"
+    }
+}
+
+struct GoalPlan: Decodable {
+    let goalId: Int
+    let workflowId: Int
+    let tasks: [PlannedTask]
+
+    enum CodingKeys: String, CodingKey {
+        case tasks
+        case goalId = "goal_id"
+        case workflowId = "workflow_id"
+    }
+}
+
+struct WorkflowTaskOutput: Decodable {
+    let taskId: Int
+    let title: String
+    let role: String
+    let status: String
+    let output: String
+
+    enum CodingKeys: String, CodingKey {
+        case title, role, status, output
+        case taskId = "task_id"
+    }
+}
+
+struct WorkflowRunResult: Decodable {
+    let goalId: Int
+    let status: String
+    let taskOutputs: [WorkflowTaskOutput]
+    let finalResult: String
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case goalId = "goal_id"
+        case taskOutputs = "task_outputs"
+        case finalResult = "final_result"
+    }
+}
+
+struct OrchestratorSpendSummary: Decodable {
+    let hourlyUsed: Int
+    let hourlyCap: Int
+    let dailyUsed: Int
+    let dailyCap: Int
+
+    enum CodingKeys: String, CodingKey {
+        case hourlyUsed = "hourly_used"
+        case hourlyCap = "hourly_cap"
+        case dailyUsed = "daily_used"
+        case dailyCap = "daily_cap"
+    }
+
+    var hudLabel: String {
+        let used = formatTokens(hourlyUsed)
+        let cap = hourlyCap > 0 ? formatTokens(hourlyCap) : "∞"
+        return "\(used) / \(cap)"
+    }
+
+    private func formatTokens(_ count: Int) -> String {
+        if count >= 1_000_000 {
+            return String(format: "%.1fM", Double(count) / 1_000_000)
+        }
+        if count >= 1_000 {
+            return String(format: "%.0fk", Double(count) / 1_000)
+        }
+        return "\(count)"
+    }
+}
+
+struct AutonomyStatus: Decodable {
+    let enabled: Bool
+}
+
+struct AutonomyEvent: Decodable, Identifiable {
+    let id: Int
+    let type: String
+    let goalId: Int?
+    let message: String
+    let createdAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, type, message
+        case goalId = "goal_id"
+        case createdAt = "created_at"
+    }
+
+    var isHighSignal: Bool {
+        switch type {
+        case "goal_completed", "goal_failed", "approval_needed", "spend_cap_skip":
+            return true
+        default:
+            return type.contains("approval")
+        }
+    }
+
+    var spokenLine: String {
+        switch type {
+        case "goal_completed":
+            return "Sir, a fleet goal has completed."
+        case "goal_failed":
+            return "Sir, a fleet goal is blocked."
+        case "approval_needed":
+            return "Sir, fleet autonomy requires your approval."
+        case "spend_cap_skip":
+            return "Sir, fleet autonomy paused. Spend cap reached."
+        default:
+            let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
+            if trimmed.count > 160 {
+                return String(trimmed.prefix(157)) + "..."
+            }
+            return trimmed
+        }
+    }
+}
+
+struct OrchestratorGoal: Decodable, Identifiable {
+    let id: Int
+    let description: String
+    let successCriteria: String?
+    let status: String
+    let createdAt: String
+    let workflowId: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case id, description, status
+        case successCriteria = "success_criteria"
+        case createdAt = "created_at"
+        case workflowId = "workflow_id"
+    }
+
+    var shortDescription: String {
+        let trimmed = description.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.count <= 42 {
+            return trimmed
+        }
+        return String(trimmed.prefix(39)) + "..."
     }
 }
 
@@ -88,6 +249,11 @@ final class OrchestratorClient {
         return try decoder.decode([OrchestratorAgent].self, from: data)
     }
 
+    func getAgent(id: Int) async throws -> OrchestratorAgent {
+        let data = try await get(path: "agents/\(id)")
+        return try decoder.decode(OrchestratorAgent.self, from: data)
+    }
+
     func runAgent(agentId: Int, task: String, context: String? = nil) async throws -> String {
         var body: [String: Any] = ["task": task]
         if let context, !context.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -96,6 +262,53 @@ final class OrchestratorClient {
         let data = try await post(path: "agents/\(agentId)/run", body: body)
         let payload = try decoder.decode(FleetAgentTaskResponse.self, from: data)
         return payload.output
+    }
+
+    func planGoal(description: String, successCriteria: String? = nil) async throws -> GoalPlan {
+        var body: [String: Any] = ["description": description]
+        if let successCriteria, !successCriteria.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            body["success_criteria"] = successCriteria
+        }
+        let data = try await post(path: "goals/plan", body: body, timeout: 120)
+        return try decoder.decode(GoalPlan.self, from: data)
+    }
+
+    func runWorkflow(workflowId: Int) async throws -> WorkflowRunResult {
+        let data = try await post(path: "workflows/\(workflowId)/run", body: [:], timeout: 300)
+        return try decoder.decode(WorkflowRunResult.self, from: data)
+    }
+
+    func halt() async throws {
+        _ = try await post(path: "halt", body: [:], timeout: 10)
+    }
+
+    func resume() async throws {
+        _ = try await post(path: "resume", body: [:], timeout: 10)
+    }
+
+    func getSpend() async throws -> OrchestratorSpendSummary {
+        let data = try await get(path: "spend")
+        return try decoder.decode(OrchestratorSpendSummary.self, from: data)
+    }
+
+    func getAutonomy() async throws -> AutonomyStatus {
+        let data = try await get(path: "autonomy")
+        return try decoder.decode(AutonomyStatus.self, from: data)
+    }
+
+    func setAutonomy(enabled: Bool) async throws -> AutonomyStatus {
+        let data = try await post(path: "autonomy", body: ["enabled": enabled], timeout: 10)
+        return try decoder.decode(AutonomyStatus.self, from: data)
+    }
+
+    func autonomyEvents(since: Int = 0) async throws -> [AutonomyEvent] {
+        let data = try await get(path: "autonomy/events?since=\(since)")
+        return try decoder.decode([AutonomyEvent].self, from: data)
+    }
+
+    func listGoals() async throws -> [OrchestratorGoal] {
+        let data = try await get(path: "goals")
+        return try decoder.decode([OrchestratorGoal].self, from: data)
     }
 
     func runAgent(
@@ -129,7 +342,7 @@ final class OrchestratorClient {
         return try await perform(request)
     }
 
-    private func post(path: String, body: [String: Any]) async throws -> Data {
+    private func post(path: String, body: [String: Any], timeout: TimeInterval = 120) async throws -> Data {
         guard let url = URL(string: path, relativeTo: baseURL) else {
             throw OrchestratorError.invalidURL
         }
@@ -137,7 +350,7 @@ final class OrchestratorClient {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.timeoutInterval = 120
+        request.timeoutInterval = timeout
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         return try await perform(request)
     }

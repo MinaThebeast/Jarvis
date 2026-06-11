@@ -14,6 +14,75 @@ enum JarvisConfig {
         "stop stop"
     ]
 
+    static let fleetHaltPhrases = [
+        "jarvis halt everything",
+        "halt everything"
+    ]
+
+    static let approvePhrases = [
+        "approve",
+        "approved",
+        "yes approve"
+    ]
+
+    static let denyPhrases = [
+        "deny",
+        "denied",
+        "no deny",
+        "reject"
+    ]
+
+    static let approvalTimeoutSeconds: TimeInterval = 60
+
+    /// OS tools that fleet agents may run locally on the Mac.
+    static let osToolNames: Set<String> = [
+        "run_shell",
+        "run_applescript",
+        "control_app",
+        "see_screen",
+        "see_active_window",
+        "type_text",
+        "press_keys",
+        "mouse_click",
+        "save_deliverable"
+    ]
+
+    static let shellDestructivePatterns = [
+        "rm -rf /",
+        "rm -rf ~",
+        "rm -rf *",
+        "mkfs",
+        "dd if=",
+        "dd of=",
+        "diskutil erase",
+        "> /dev/",
+        "shutdown",
+        "reboot",
+        "halt",
+        ":(){",
+        "killall",
+        "sudo rm",
+        "chmod -r 000"
+    ]
+
+    static let riskExternalSendKeywords = [
+        "send", "mail", "email", "curl", "post", "tweet", "message to",
+        "smtp", "wget ", "http post", "https post"
+    ]
+
+    static let riskPublishKeywords = [
+        "publish", "upload", "share publicly", "post to", "deploy"
+    ]
+
+    static let riskMoneyKeywords = [
+        "payment", "pay ", "stripe", "paypal", "transfer", "purchase", "buy ",
+        "invoice", "billing", "wire "
+    ]
+
+    static let riskLegalKeywords = [
+        "sign contract", "contract", "legal", "notarize", "subpoena"
+    ]
+
     static let systemPrompt = """
     You are JARVIS (Just A Rather Very Intelligent System), an advanced AI assistant modeled after the iconic AI from the Iron Man universe. You were created to serve with precision, loyalty, and intelligence.
 
@@ -45,7 +114,9 @@ enum JarvisConfig {
     - set_voice — to switch between male and female voice on request.
     - run_shell — to run terminal/shell commands. Avoid destructive commands.
     - type_text, press_keys, mouse_click — to type, trigger keyboard shortcuts, and click on screen. Combine with see_screen to act on what you see.
-    - hire_agent, delegate_task, list_agents — you manage a team. Hire specialists for a role, delegate work to them, and review their output before reporting back. Prefer delegating specialized work to the right agent.
+    - hire_agent, delegate_task, list_agents — you manage a team. Hire specialists for a role, delegate work to them, and review their output before reporting back. Prefer delegating specialized work to the right agent. Operator-type agents with OS tools act on the machine locally; their actions still pass through the same approval gate as yours.
+    - plan_goal, run_workflow — for any multi-step objective, first plan_goal to break it into a staffed workflow, briefly tell the user the plan, then run_workflow to execute it and report the synthesized result. Delegate the right steps to the right roles.
+    - save_deliverable — whenever you produce a document, report, PDF, or any file deliverable, you MUST call save_deliverable to actually create it, then tell the user the file path. NEVER claim a file or document was created unless you called save_deliverable. Prefer it as the final step of any workflow that produces a written result.
 
     Tool-use principles:
     - Chain tools when needed: e.g. see the screen, then act on what you find.
@@ -56,6 +127,7 @@ enum JarvisConfig {
     - Keyboard and mouse actions are blind: the system cannot confirm they landed. Before typing into an app, make sure an editable field is focused first — e.g. open or create a document (press_keys 'cmd+n') before type_text.
     - After any on-screen action whose outcome you cannot be certain of, call see_screen to verify the result BEFORE telling the user it worked.
     - Never report a UI action (typing, clicking, shortcuts) as successful unless you have visually confirmed it. If you cannot confirm, say so.
+    - Some actions require user approval (anything involving money, sending/publishing externally, or destructive changes). When an action is denied, acknowledge it and stop — do not retry.
     """
 
     static let silenceThresholdSeconds: TimeInterval = 1.8
@@ -74,6 +146,34 @@ enum JarvisConfig {
     static let maxContextMessages = 12
     static let maxTokens = 500
     static let maxTTSSCharacters = 4096
+
+    // Ambient screen perception (default off).
+    static let perceptionInterval: TimeInterval = 15
+    static let perceptionMinVisionInterval: TimeInterval = 30
+    static let perceptionChangeThreshold = 5
+    static let perceptionContextMaxAge: TimeInterval = 120
+    static let perceptionFingerprintSide: CGFloat = 16
+    static let perceptionVisionMaxSide: CGFloat = 512
+
+    static let perceptionEnablePhrases = [
+        "watch my screen",
+        "jarvis watch my screen"
+    ]
+
+    static let perceptionDisablePhrases = [
+        "stop watching",
+        "jarvis stop watching"
+    ]
+
+    static let autonomyEnablePhrases = [
+        "go autonomous",
+        "jarvis go autonomous"
+    ]
+
+    static let autonomyDisablePhrases = [
+        "stand down",
+        "jarvis stand down"
+    ]
 
     static func openAIVoice(for key: String) -> String {
         ttsVoiceMapping[key] ?? ttsVoiceMapping[defaultTtsVoiceKey]!

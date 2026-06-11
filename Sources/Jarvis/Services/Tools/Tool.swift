@@ -29,6 +29,17 @@ final class ToolRegistry {
 
     var isEmpty: Bool { tools.isEmpty }
 
+    /// Registry containing only tools whose names appear in `names` (least privilege).
+    func subset(named names: [String]) -> ToolRegistry {
+        let registry = ToolRegistry()
+        for name in names {
+            if let tool = tools[name] {
+                registry.register(tool)
+            }
+        }
+        return registry
+    }
+
     /// OpenAI `tools` array for chat completions requests.
     func openAIToolsArray() -> [[String: Any]] {
         tools.values.map { tool in

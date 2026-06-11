@@ -8,7 +8,11 @@ struct ContentView: View {
     var body: some View {
         Group {
             if vm.isConfigured {
-                HUDView()
+                HUDView(
+                    activityCenter: vm.activityCenter,
+                    approvalService: vm.approvalService,
+                    perceptionService: vm.perceptionService
+                )
                     .transition(.opacity)
             } else {
                 SetupView()
