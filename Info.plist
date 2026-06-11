@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>Jarvis</string>
+    <key>CFBundleDisplayName</key>
+    <string>JARVIS</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.stark.jarvis</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0.3</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>JARVIS requires microphone access to listen for your voice commands and wake word.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>JARVIS uses speech recognition to understand your commands in real time.</string>
+    <key>LSUIElement</key>
+    <false/>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSSupportsAutomaticGraphicsSwitching</key>
+    <true/>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.productivity</string>
+</dict>
+</plist>

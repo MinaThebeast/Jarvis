@@ -1,0 +1,22 @@
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+
+# macOS
+.DS_Store
+*.swp
+*~
+
+# Xcode
+DerivedData/
+*.xcuserstate
+xcuserdata/
+
+# Secrets — never commit API keys
+.env
+.env.*
+*.pem
+
+# Local logs
+*.log
