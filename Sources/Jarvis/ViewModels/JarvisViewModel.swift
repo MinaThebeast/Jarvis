@@ -63,6 +63,10 @@ final class JarvisViewModel: ObservableObject {
             SeeActiveWindowTool(openAI: openAI, screenCapture: screenCapture),
             AppControlTool(actionSafety: actionSafety, auditLog: auditLog),
             AppleScriptTool(actionSafety: actionSafety, auditLog: auditLog),
+            ShellTool(actionSafety: actionSafety, auditLog: auditLog),
+            TypeTextTool(actionSafety: actionSafety, auditLog: auditLog),
+            PressKeysTool(actionSafety: actionSafety, auditLog: auditLog),
+            MouseClickTool(actionSafety: actionSafety, auditLog: auditLog),
             SetVoiceTool(voiceStore: voiceStore)
         ])
         self.messages = conversationStore.load()

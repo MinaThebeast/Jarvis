@@ -67,6 +67,27 @@ cd "/Users/thebeastmini1/Desktop/Jarvis V1.0.3"
 swift run
 ```
 
+Or use the desktop **Start JARVIS** shortcut, which rebuilds and opens `Jarvis.app` when sources have changed.
+
+---
+
+## Packaging
+
+JARVIS ships as a signed **`Jarvis.app`** bundle in the project root. The launcher runs `scripts/package-app.sh`, which:
+
+1. Builds a release binary (`swift build -c release`)
+2. Assembles `Jarvis.app` with `Contents/MacOS/Jarvis`, `Contents/Info.plist`, and `Contents/Resources/`
+3. Ad-hoc code-signs the bundle with a stable identifier (`com.stark.jarvis`)
+
+macOS TCC (Accessibility, Screen Recording, Automation, Microphone, Speech Recognition) binds permissions to that bundle identity. Because the identifier stays the same across rebuilds, grants persist instead of resetting every time you recompile.
+
+To build the app manually:
+
+```bash
+./scripts/package-app.sh
+open Jarvis.app
+```
+
 ---
 
 ## Wake Words

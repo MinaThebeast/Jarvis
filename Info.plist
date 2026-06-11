@@ -8,6 +8,10 @@
     <string>JARVIS</string>
     <key>CFBundleIdentifier</key>
     <string>com.stark.jarvis</string>
+    <key>CFBundleExecutable</key>
+    <string>Jarvis</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>CFBundleShortVersionString</key>
@@ -16,6 +20,8 @@
     <string>JARVIS requires microphone access to listen for your voice commands and wake word.</string>
     <key>NSSpeechRecognitionUsageDescription</key>
     <string>JARVIS uses speech recognition to understand your commands in real time.</string>
+    <key>NSAppleEventsUsageDescription</key>
+    <string>JARVIS controls other applications to carry out your commands.</string>
     <key>LSUIElement</key>
     <false/>
     <key>NSHighResolutionCapable</key>

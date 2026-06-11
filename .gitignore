@@ -3,6 +3,9 @@
 .swiftpm/
 Package.resolved
 
+# Packaged app bundle (built by scripts/package-app.sh)
+Jarvis.app
+
 # macOS
 .DS_Store
 *.swp
