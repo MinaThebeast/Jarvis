@@ -16,10 +16,12 @@ final class JarvisViewModel: ObservableObject {
     @Published var statusMessage = "JARVIS ONLINE"
     @Published var isMicListening = false
     @Published var abortRequested = false
+    @Published var orchestratorOnline = false
 
     // MARK: Services
 
     let openAI: OpenAIService
+    let orchestrator: OrchestratorClient
     let speech: SpeechRecognitionService
     let playback: AudioPlaybackService
     let conversationStore: ConversationStore
@@ -33,6 +35,7 @@ final class JarvisViewModel: ObservableObject {
 
     private var cancellables = Set<AnyCancellable>()
     private var currentTask: Task<Void, Never>?
+    private var orchestratorMonitorTask: Task<Void, Never>?
 
     // MARK: Init
 
@@ -45,6 +48,8 @@ final class JarvisViewModel: ObservableObject {
 
         self.voiceStore = voiceStore
         self.openAI = OpenAIService(voiceStore: voiceStore)
+        let orchestrator = OrchestratorClient()
+        self.orchestrator = orchestrator
         self.speech = SpeechRecognitionService()
         self.playback = AudioPlaybackService()
         self.memoryStore = memoryStore
@@ -67,6 +72,9 @@ final class JarvisViewModel: ObservableObject {
             TypeTextTool(actionSafety: actionSafety, auditLog: auditLog),
             PressKeysTool(actionSafety: actionSafety, auditLog: auditLog),
             MouseClickTool(actionSafety: actionSafety, auditLog: auditLog),
+            HireAgentTool(orchestrator: orchestrator),
+            DelegateTaskTool(orchestrator: orchestrator),
+            ListAgentsTool(orchestrator: orchestrator),
             SetVoiceTool(voiceStore: voiceStore)
         ])
         self.messages = conversationStore.load()
@@ -101,6 +109,9 @@ final class JarvisViewModel: ObservableObject {
             }
         }
 
+        await refreshOrchestratorStatus()
+        startOrchestratorMonitoring()
+
         await speech.start()
 
         if speech.isActive {
@@ -111,12 +122,31 @@ final class JarvisViewModel: ObservableObject {
     }
 
     func stopJarvis() {
+        orchestratorMonitorTask?.cancel()
+        orchestratorMonitorTask = nil
         speech.stop()
         playback.stop()
         isMicListening = false
         currentTask?.cancel()
         phase         = .idle
         statusMessage = "OFFLINE"
+    }
+
+    // MARK: Orchestrator
+
+    private func refreshOrchestratorStatus() async {
+        orchestratorOnline = await orchestrator.health()
+    }
+
+    private func startOrchestratorMonitoring() {
+        orchestratorMonitorTask?.cancel()
+        orchestratorMonitorTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 15_000_000_000)
+                guard !Task.isCancelled, let self else { return }
+                await self.refreshOrchestratorStatus()
+            }
+        }
     }
 
     // MARK: Speech Events

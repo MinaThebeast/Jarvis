@@ -45,6 +45,7 @@ enum JarvisConfig {
     - set_voice — to switch between male and female voice on request.
     - run_shell — to run terminal/shell commands. Avoid destructive commands.
     - type_text, press_keys, mouse_click — to type, trigger keyboard shortcuts, and click on screen. Combine with see_screen to act on what you see.
+    - hire_agent, delegate_task, list_agents — you manage a team. Hire specialists for a role, delegate work to them, and review their output before reporting back. Prefer delegating specialized work to the right agent.
 
     Tool-use principles:
     - Chain tools when needed: e.g. see the screen, then act on what you find.

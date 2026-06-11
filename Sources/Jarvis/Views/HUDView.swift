@@ -211,6 +211,11 @@ struct HUDView: View {
     private var rightPanel: some View {
         VStack(alignment: .trailing, spacing: 18) {
             panelHeader("DIAGNOSTICS")
+            statusRow(
+                "ORCHESTRATOR",
+                value: vm.orchestratorOnline ? "ONLINE" : "OFFLINE",
+                ok: vm.orchestratorOnline
+            )
             metricRow("LATENCY",  value: "—")
             metricRow("MODEL",    value: "GPT-4o")
             metricRow("TTS",      value: vm.voiceStore.openAIVoiceName)

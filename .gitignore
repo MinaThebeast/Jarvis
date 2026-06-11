@@ -21,5 +21,9 @@ xcuserdata/
 .env.*
 *.pem
 
+# Python orchestrator
+orchestrator/.venv/
+orchestrator/jarvis.db
+
 # Local logs
 *.log
